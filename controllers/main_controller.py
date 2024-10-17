@@ -2,10 +2,12 @@ import logging
 from PySide6.QtWidgets import QFileDialog
 from models.heap_dump import HeapDumpModel
 
+
 class MainController:
     """
     Controller for handling main window events and actions.
     """
+
     def __init__(self, view):
         """
         Initialize the controller with the main window view.

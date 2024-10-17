@@ -2,13 +2,16 @@ import logging
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QTableView, QLabel, QHeaderView, QAbstractItemView
 )
-from PySide6.QtGui import QStandardItemModel, QStandardItem
+from PySide6.QtGui import QStandardItemModel, QStandardItem, QCursor
 from PySide6.QtCore import Qt
+from utils.helpers import int_or_none, float_or_none
+
 
 class ObjectAttributeWindow(QWidget):
     """
     Window displaying attributes and references of a specific object.
     """
+
     def __init__(self, obj_id, obj_data, heap_dump):
         """
         Initialize the object attribute window.
@@ -26,6 +29,8 @@ class ObjectAttributeWindow(QWidget):
 
         self.setWindowTitle(f"Object Details - ID: {obj_id}")
         self.resize(600, 800)
+
+        self.child_windows = []
 
         self.setup_ui()
 
@@ -75,6 +80,8 @@ class ObjectAttributeWindow(QWidget):
                 name_item = QStandardItem(str(attr_name))
                 if isinstance(attr_value, list) and len(attr_value) == 2:
                     value_item = QStandardItem(f"Object ID: {attr_value[1]}")
+                    value_item.setForeground(Qt.blue)
+                    value_item.setData(attr_value, Qt.UserRole)
                     type_item = QStandardItem(str(attr_value[0]))
                 else:
                     value_item = QStandardItem(str(attr_value))
@@ -86,6 +93,11 @@ class ObjectAttributeWindow(QWidget):
             self.attr_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
             self.attr_table.setSelectionBehavior(QAbstractItemView.SelectRows)
             self.attr_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+
+            # Handle clicks on attributes
+            self.attr_table.clicked.connect(self.handle_attr_click)
+            self.attr_table.setMouseTracking(True)
+            self.attr_table.entered.connect(self.change_cursor)
         except Exception as e:
             self.logger.exception("Failed to populate attributes table")
 
@@ -117,8 +129,30 @@ class ObjectAttributeWindow(QWidget):
 
             # Handle clicks on object references
             self.ref_table.clicked.connect(self.handle_ref_click)
+            self.ref_table.setMouseTracking(True)
+            self.ref_table.entered.connect(self.change_cursor_ref)
         except Exception as e:
             self.logger.exception("Failed to populate references table")
+
+    def handle_attr_click(self, index):
+        """
+        Handle clicks on attribute entries.
+
+        Args:
+            index: The model index of the clicked cell.
+        """
+        try:
+            if index.column() == 1:
+                attr_data = index.model().item(index.row(), 1).data(Qt.UserRole)
+                if attr_data:
+                    ref_type, ref_id = attr_data
+                    obj_data = self.heap_dump.data.get(ref_type, {}).get(str(ref_id))
+                    if obj_data:
+                        new_window = ObjectAttributeWindow(ref_id, obj_data, self.heap_dump)
+                        new_window.show()
+                        self.child_windows.append(new_window)
+        except Exception as e:
+            self.logger.exception("Failed to handle attribute click")
 
     def handle_ref_click(self, index):
         """
@@ -135,5 +169,38 @@ class ObjectAttributeWindow(QWidget):
                 if obj_data:
                     new_window = ObjectAttributeWindow(ref_id, obj_data, self.heap_dump)
                     new_window.show()
+                    self.child_windows.append(new_window)
         except Exception as e:
             self.logger.exception("Failed to handle reference click")
+
+    def change_cursor(self, index):
+        """
+        Change the cursor when hovering over attribute cells.
+
+        Args:
+            index: The model index of the cell under the cursor.
+        """
+        if index.column() == 1:
+            data = index.model().item(index.row(), index.column()).data(Qt.UserRole)
+            if data:
+                self.attr_table.setCursor(QCursor(Qt.PointingHandCursor))
+            else:
+                self.attr_table.setCursor(QCursor(Qt.ArrowCursor))
+        else:
+            self.attr_table.setCursor(QCursor(Qt.ArrowCursor))
+
+    def change_cursor_ref(self, index):
+        """
+        Change the cursor when hovering over reference cells.
+
+        Args:
+            index: The model index of the cell under the cursor.
+        """
+        if index.column() == 0:
+            data = index.model().item(index.row(), index.column()).data(Qt.UserRole)
+            if data:
+                self.ref_table.setCursor(QCursor(Qt.PointingHandCursor))
+            else:
+                self.ref_table.setCursor(QCursor(Qt.ArrowCursor))
+        else:
+            self.ref_table.setCursor(QCursor(Qt.ArrowCursor))

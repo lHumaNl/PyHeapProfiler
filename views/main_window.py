@@ -4,14 +4,17 @@ from PySide6.QtWidgets import (
     QTableView, QLabel, QHeaderView, QMessageBox, QMenu
 )
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QAction
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSortFilterProxyModel
 from views.object_details_window import ObjectDetailsWindow
 from controllers.main_controller import MainController
+from utils.helpers import int_or_none, float_or_none
+
 
 class MainWindow(QMainWindow):
     """
     The main window of the application.
     """
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Heap Dump Analyzer")
@@ -109,54 +112,58 @@ class MainWindow(QMainWindow):
                     size_change = comp_result.get('size_change', 0)
                     size_percent_change = comp_result.get('size_percent_change', 0)
 
-                    # For display purposes, we can set None if zero
-                    num_new_objects_display = num_new_objects if num_new_objects != 0 else None
-                    num_deleted_objects_display = num_deleted_objects if num_deleted_objects != 0 else None
-                    size_change_display = size_change if size_change != 0 else None
-                    size_percent_change_display = size_percent_change if size_percent_change != 0 else None
-
                     num_total_objects = num_objects_main + num_new_objects - num_deleted_objects
                     total_objects_combined = self.current_dump.total_objects + self.comparison_dump.total_objects
-                    perc_objects = (num_total_objects / total_objects_combined) * 100 if total_objects_combined else 0
+                    perc_objects = (num_total_objects / total_objects_combined * 100) if total_objects_combined else 0
 
                     total_size_combined = total_size_main + size_change
                     total_size_overall = self.current_dump.total_size + self.comparison_dump.total_size
-                    perc_size = (total_size_combined / total_size_overall) * 100 if total_size_overall else 0
+                    perc_size = (total_size_combined / total_size_overall * 100) if total_size_overall else 0
 
                     row_items = [
                         type_item,
-                        QStandardItem(str(num_total_objects)),
-                        QStandardItem(f"{perc_objects:.2f}"),
-                        QStandardItem(str(total_size_combined)),
-                        QStandardItem(f"{perc_size:.2f}"),
-                        QStandardItem(str(num_objects_main)),
-                        QStandardItem(str(num_objects_other)),
-                        QStandardItem(str(num_new_objects_display) if num_new_objects_display is not None else ""),
-                        QStandardItem(str(num_deleted_objects_display) if num_deleted_objects_display is not None else ""),
-                        QStandardItem(str(total_size_main)),
-                        QStandardItem(str(total_size_other)),
-                        QStandardItem(f"{size_percent_change_display:.2f}" if size_percent_change_display is not None else ""),
-                        QStandardItem(str(size_change_display) if size_change_display is not None else "")
+                        QStandardItem(int_or_none(num_total_objects)),
+                        QStandardItem(float_or_none(perc_objects)),
+                        QStandardItem(int_or_none(total_size_combined)),
+                        QStandardItem(float_or_none(perc_size)),
+                        QStandardItem(int_or_none(num_objects_main)),
+                        QStandardItem(int_or_none(num_objects_other)),
+                        QStandardItem(int_or_none(num_new_objects)),
+                        QStandardItem(int_or_none(num_deleted_objects)),
+                        QStandardItem(int_or_none(total_size_main)),
+                        QStandardItem(int_or_none(total_size_other)),
+                        QStandardItem(float_or_none(size_percent_change)),
+                        QStandardItem(int_or_none(size_change))
                     ]
                 else:
                     obj_data = data.processed_data[obj_type]
                     num_objects = obj_data['num_objects']
                     total_size_obj = obj_data['total_size']
 
-                    perc_objects = (num_objects / total_objects) * 100 if total_objects else 0
-                    perc_size = (total_size_obj / total_size) * 100 if total_size else 0
+                    perc_objects = (num_objects / total_objects * 100) if total_objects else 0
+                    perc_size = (total_size_obj / total_size * 100) if total_size else 0
 
                     row_items = [
                         type_item,
-                        QStandardItem(str(num_objects)),
-                        QStandardItem(f"{perc_objects:.2f}"),
-                        QStandardItem(str(total_size_obj)),
-                        QStandardItem(f"{perc_size:.2f}")
+                        QStandardItem(int_or_none(num_objects)),
+                        QStandardItem(float_or_none(perc_objects)),
+                        QStandardItem(int_or_none(total_size_obj)),
+                        QStandardItem(float_or_none(perc_size))
                     ]
+
+                # Set data for sorting
+                for i, item in enumerate(row_items[1:], start=1):
+                    value = float(item.text()) if '.' in item.text() else int(item.text())
+                    item.setData(value, Qt.UserRole)
 
                 model.appendRow(row_items)
 
-            self.table_view.setModel(model)
+            # Set up proxy model for numeric sorting
+            self.proxy_model = QSortFilterProxyModel()
+            self.proxy_model.setSourceModel(model)
+            self.proxy_model.setSortRole(Qt.UserRole)
+            self.table_view.setModel(self.proxy_model)
+
             self.table_view.setSortingEnabled(True)
             self.table_view.sortByColumn(1, Qt.DescendingOrder)
             header = self.table_view.horizontalHeader()

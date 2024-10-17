@@ -3,6 +3,7 @@ import logging
 from PySide6.QtWidgets import QApplication
 from views.main_window import MainWindow
 
+
 def main():
     """
     Entry point for the application.
@@ -15,6 +16,7 @@ def main():
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
+
 
 if __name__ == "__main__":
     main()

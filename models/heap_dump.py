@@ -1,10 +1,12 @@
 import json
 import logging
 
+
 class HeapDumpModel:
     """
     Model representing a heap dump loaded from a JSON file.
     """
+
     def __init__(self, file_path):
         """
         Initialize the heap dump model.
