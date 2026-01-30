@@ -7,6 +7,8 @@ compared using a graphical interface.
 
 ## Features
 
+### Core Functionality
+
 - **Heap Dump Collection**: Collect metadata from all objects currently in memory using Python's garbage collector (gc)
   and additional code objects (functions, methods).
 - **Heap Dump Analysis**: View and analyze the memory usage of Python objects. Attributes such as object size,
@@ -18,12 +20,44 @@ compared using a graphical interface.
 - **Lazy Loading**: Efficiently handle large dumps by lazily loading objects as needed, avoiding memory overload in the
   profiler itself.
 
+### Performance Optimizations
+
+- **Fast JSON Parsing**: Uses orjson for 2-3x faster JSON parsing compared to standard json module
+- **Asynchronous Loading**: Multi-threaded loading with progress indicators to prevent UI blocking
+- **Chunked Processing**: Large files are loaded in chunks with real-time progress feedback
+
+### Advanced Features
+
+- **Filtering**: Filter objects by size, type, and status (New/Deleted/Old/Modified in comparison mode)
+- **Search**: Search objects by ID, attribute values, or object type
+- **Export**: Export results to CSV, JSON, or Excel (.xlsx) formats with formatted headers
+- **Data Visualization**: Memory usage charts over time using matplotlib
+- **Themes**: Support for light and dark themes with instant switching
+- **Drag & Drop**: Load heap dump files by dragging and dropping them into the main window
+- **Settings Persistence**: Automatically saves and restores window geometry, column settings, and theme preferences
+
+### User Experience
+
+- **Keyboard Shortcuts**:
+    - `Ctrl+O` - Open heap dump
+    - `Ctrl+C` - Load file for comparison
+    - `Ctrl+E` - Export results
+    - `F5` - Refresh current data
+    - `Ctrl+Q` - Exit application
+- **Interactive UI**: Sortable columns, customizable column visibility, adjustable column widths
+- **Row Numbering**: Automatic row numbering in all tables for easy reference
+- **Context Menus**: Right-click to toggle column visibility
+- **Error Handling**: Detailed error messages with full stack traces for debugging
+
 ## Requirements
 
 To run PyHeapProfiler, you need the following dependencies installed:
 
 - Python 3.8+
 - PySide6 (for the graphical interface)
+- matplotlib (for data visualization)
+- orjson (for fast JSON parsing)
+- openpyxl (for Excel export)
 
 You can install the required dependencies by running:
 
@@ -45,6 +79,7 @@ The heap dump files include information such as:
 - Object attributes (for objects with `__dict__`)
 - Object references (i.e., objects referenced by the current object)
 - Source code information (for functions, methods, and classes)
+- Optional timestamps for time-series analysis
 
 ### Loading and Comparing Dumps
 
@@ -60,6 +95,7 @@ dump for comparison to identify changes between memory snapshots.
 
 The main window presents the following data:
 
+- Row number (auto-incremented)
 - Object type
 - Number of objects per type
 - Total size per type
@@ -81,10 +117,95 @@ python main.py
 
 This will open the graphical interface where you can load and compare heap dumps.
 
-2. **Load a heap dump**: Use the "Load Heap Dump" button to select a heap dump file in JSON format.
+2. **Load a heap dump**:
+    - Click the "Load Heap Dump" button, or
+    - Use File → Load Heap Dump menu, or
+    - Drag and drop a JSON file into the window
 
 3. **Compare dumps**: To compare two dumps, first load the initial heap dump, then use the "Load for Comparison" button
-   to load the second heap dump.
+   or menu item to load the second heap dump.
 
-4. **View detailed object information**: By clicking on an object type or individual objects in the table, you can view
-   their attributes, references, and source code information.
+4. **Filter and search**: Use the filter panel to:
+    - Filter by object size (min/max bytes)
+    - Filter by object type
+    - Filter by status (New/Deleted/Old/Modified)
+    - Search by object ID
+    - Search by attribute value
+
+5. **View detailed object information**: By clicking on an object type in the table, you can view:
+    - Individual objects of that type
+    - Their attributes, references, and source code information
+    - Click on object IDs to navigate through the object graph
+
+6. **Export data**: Click "Export Results" to save the current table data to CSV, JSON, or Excel format.
+
+7. **View charts**: Click "Show Charts" to visualize memory usage over time (if timestamp data is available).
+
+8. **Customize UI**:
+    - Use the View menu to switch between light and dark themes
+    - Right-click on table headers to toggle column visibility
+    - Drag column headers to reorder
+    - Adjust column widths by dragging the dividers
+    - All settings are automatically saved and restored
+
+## Project Structure
+
+```
+PyHeapProfiler/
+├── controllers/           # Controllers (event handling logic)
+│   └── main_controller.py # Main window controller
+├── models/               # Data models
+│   └── heap_dump.py      # Heap dump data model with filtering/search
+├── views/                # UI components
+│   ├── main_window.py            # Main application window
+│   ├── object_details_window.py  # Object details viewer
+│   ├── object_attribute_window.py # Object attributes and references
+│   └── chart_window.py          # Memory usage charts
+├── utils/                # Helper utilities
+│   ├── helpers.py        # Formatting utilities
+│   ├── theme_manager.py  # Theme management (light/dark)
+│   ├── settings_manager.py # Settings persistence
+│   └── error_handler.py # Error handling and logging
+├── heapdumps/            # Directory for heap dump files
+├── main.py               # Application entry point
+├── requirements.txt      # Project dependencies
+├── README.md            # This file
+├── PROJECT_ANALYSIS.md   # Detailed project analysis
+└── BUGFIX_PLAN.md       # Bug fix plan and tracking
+```
+
+## Architecture
+
+The project follows the Model-View-Controller (MVC) pattern:
+
+- **Models**: Handle data loading, processing, and comparison (e.g., `HeapDumpModel`)
+- **Views**: Display data and manage UI components (e.g., `MainWindow`, `ObjectDetailsWindow`)
+- **Controllers**: Handle user actions and coordinate between views and models (e.g., `MainController`)
+
+## Performance Considerations
+
+- **orjson**: Used for fast JSON parsing (2-3x faster than standard json)
+- **Threading**: Asynchronous loading prevents UI blocking
+- **Lazy Loading**: Objects are loaded in batches (100 at a time) for large dumps
+- **Proxy Models**: Used for efficient sorting and filtering without modifying source data
+
+## Error Handling
+
+All errors are logged with full stack traces. User-friendly error messages are displayed for:
+
+- File not found errors
+- Invalid JSON format
+- Data format errors
+- Loading errors
+- Export errors
+
+Check the application logs for detailed debugging information.
+
+## License
+
+This project is provided as-is for educational and development purposes.
+
+## Contributing
+
+Contributions are welcome! Please ensure all changes follow the existing code conventions and include appropriate error
+handling and logging.

@@ -4,6 +4,16 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QCursor, QAction
 from PySide6.QtCore import Qt, QSortFilterProxyModel
+
+
+class RowNumberProxyModel(QSortFilterProxyModel):
+    """Proxy model that displays visual row numbers in vertical header."""
+
+    def headerData(self, section, orientation, role=Qt.DisplayRole):
+        if orientation == Qt.Vertical and role == Qt.DisplayRole:
+            # Return visual row number (1-based) for vertical header
+            return str(section + 1)
+        return super().headerData(section, orientation, role)
 from views.object_attribute_window import ObjectAttributeWindow
 from utils.helpers import int_or_none, float_or_none
 
@@ -27,6 +37,10 @@ class ObjectDetailsWindow(QWidget):
         self.current_dump = current_dump
         self.comparison_dump = comparison_dump
         self.logger = logging.getLogger(__name__)
+
+        self.logger.debug(f"Initializing ObjectDetailsWindow for type: {obj_type}")
+        self.logger.debug(f"Current dump data loaded: {bool(self.current_dump.data)}")
+        self.logger.debug(f"Current dump processed_data loaded: {bool(self.current_dump.processed_data)}")
 
         self.setWindowTitle(f"Object Details: {self.obj_type}")
         self.resize(800, 600)
@@ -96,11 +110,10 @@ class ObjectDetailsWindow(QWidget):
                 all_obj_ids = set(current_objects.keys()).union(comparison_objects.keys())
 
                 for obj_id in all_obj_ids:
-                    row_items = []
                     id_item = QStandardItem(str(obj_id))
                     id_item.setForeground(Qt.blue)
                     id_item.setData(obj_id, Qt.UserRole)
-                    row_items.append(id_item)
+                    row_items = [id_item]
 
                     status = self.object_statuses.get(obj_id, 'Unknown')
                     status_item = QStandardItem(status)
@@ -190,18 +203,29 @@ class ObjectDetailsWindow(QWidget):
 
                     self.model.appendRow(row_items)
             else:
+                self.logger.debug(f"Loading objects for type: {self.obj_type}")
+                self.logger.debug(f"Processed data keys: {list(self.current_dump.processed_data.keys())}")
+                self.logger.debug(f"Processed data for {self.obj_type}: {self.current_dump.processed_data.get(self.obj_type, {})}")
+                
                 self.objects = self.current_dump.processed_data.get(self.obj_type, {}).get('objects', {})
+                self.logger.debug(f"Loaded {len(self.objects)} objects from processed_data")
+                
+                if not self.objects:
+                    self.logger.warning(f"No objects found in processed_data for {self.obj_type}, trying raw data")
+                    self.objects = self.current_dump.data.get(self.obj_type, {})
+                    self.logger.debug(f"Loaded {len(self.objects)} objects from raw data")
+                
                 self.loaded_rows = 0
                 self.lazy_load_objects(limit=100)
 
-            # Set up proxy model for numeric sorting
-            self.proxy_model = QSortFilterProxyModel()
+            # Set up proxy model for numeric sorting with dynamic row numbers
+            self.proxy_model = RowNumberProxyModel()
             self.proxy_model.setSourceModel(self.model)
             self.proxy_model.setSortRole(Qt.UserRole)
             self.table_view.setModel(self.proxy_model)
 
             self.table_view.setSortingEnabled(True)
-            self.table_view.sortByColumn(1, Qt.DescendingOrder)
+            self.table_view.sortByColumn(2, Qt.DescendingOrder)
             header = self.table_view.horizontalHeader()
             header.setSectionResizeMode(QHeaderView.Interactive)  # Allow column width adjustment
             self.table_view.resizeColumnsToContents()
@@ -212,8 +236,9 @@ class ObjectDetailsWindow(QWidget):
                 self.table_view.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeToContents)
 
             total_objects = self.model.rowCount()
-            self.summary_label.setText(f"Total objects: {total_objects}")
-            self.logger.info("Object details table populated successfully")
+            total_in_dump = len(self.objects)
+            self.summary_label.setText(f"Total objects: {total_objects} (in dump: {total_in_dump})")
+            self.logger.info(f"Object details table populated successfully. Displayed: {total_objects}, Available: {total_in_dump}")
         except Exception as e:
             self.logger.exception("Failed to populate object details table")
 
@@ -225,13 +250,16 @@ class ObjectDetailsWindow(QWidget):
             limit (int): Number of objects to load at a time.
         """
         try:
+            self.logger.debug(f"Lazy loading objects. Total objects: {len(self.objects)}, Already loaded: {self.loaded_rows}, Limit: {limit}")
             count = 0
             obj_ids = list(self.objects.keys())[self.loaded_rows:]
+            self.logger.debug(f"Object IDs to load: {len(obj_ids)}")
             for obj_id in obj_ids:
                 if count >= limit:
                     break
 
                 obj_data = self.objects[obj_id]
+                self.loaded_rows += 1
 
                 id_item = QStandardItem(str(obj_id))
                 id_item.setForeground(Qt.blue)
@@ -253,7 +281,7 @@ class ObjectDetailsWindow(QWidget):
 
                 self.model.appendRow(row_items)
                 count += 1
-                self.loaded_rows += 1
+            self.logger.debug(f"Loaded {count} objects this batch. Total loaded: {self.loaded_rows}")
         except Exception as e:
             self.logger.exception("Error during lazy loading of objects")
 
@@ -262,7 +290,13 @@ class ObjectDetailsWindow(QWidget):
         Load all remaining objects.
         """
         try:
-            self.lazy_load_objects(limit=len(self.objects) - self.loaded_rows)
+            self.logger.debug(f"Loading all objects. Total objects: {len(self.objects)}, Already loaded: {self.loaded_rows}")
+            remaining = len(self.objects) - self.loaded_rows
+            self.logger.debug(f"Remaining objects to load: {remaining}")
+            if remaining <= 0:
+                self.logger.warning("No remaining objects to load")
+                return
+            self.lazy_load_objects(limit=remaining)
         except Exception as e:
             self.logger.exception("Failed to load all objects")
 
@@ -284,6 +318,7 @@ class ObjectDetailsWindow(QWidget):
         try:
             if index.column() == 0:  # Object ID column
                 obj_id = self.proxy_model.data(self.proxy_model.index(index.row(), 0), Qt.UserRole)
+                self.logger.debug(f"Row clicked for obj_id: {obj_id}, type: {type(obj_id)}")
                 if self.comparison_dump:
                     # Decide which dump to use based on object status
                     status = self.proxy_model.data(self.proxy_model.index(index.row(), 1))
@@ -295,8 +330,13 @@ class ObjectDetailsWindow(QWidget):
                             obj_id)
                 else:
                     obj_data = self.objects.get(str(obj_id))
+                    if not obj_data:
+                        obj_data = self.objects.get(obj_id)
+                self.logger.debug(f"Found obj_data: {obj_data is not None}")
                 if obj_data:
                     self.show_object_details(obj_id, obj_data)
+                else:
+                    self.logger.warning(f"Object data not found for obj_id: {obj_id}")
         except Exception as e:
             self.logger.exception("Failed to handle row click")
 
@@ -323,7 +363,7 @@ class ObjectDetailsWindow(QWidget):
         Args:
             index: The model index of the cell under the cursor.
         """
-        if index.column() == 0:
+        if index.column() == 0:  # Object ID column
             self.table_view.setCursor(QCursor(Qt.PointingHandCursor))
         else:
             self.table_view.setCursor(QCursor(Qt.ArrowCursor))
